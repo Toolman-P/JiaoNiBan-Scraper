@@ -1,15 +1,20 @@
 package dean
 
 import (
-	"JiaoNiBan-scraper/base"
+	"JiaoNiBan-data/scraper/base"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
 	"github.com/gocolly/colly"
 )
 
-func RequestHRef(url string, page int) ([]base.ScraperHref, int) {
+func parseIndex(i int) {
+
+}
+
+func RequestHRef(url string, mode int) ([]base.ScraperHref, int) {
 
 	var arr []base.ScraperHref
 	c := colly.NewCollector(
@@ -30,7 +35,7 @@ func RequestHRef(url string, page int) ([]base.ScraperHref, int) {
 
 		h.ForEach("div[class='wz']", func(_ int, i *colly.HTMLElement) {
 			i.ForEach("a[href]", func(_ int, j *colly.HTMLElement) {
-				if page == 0 {
+				if mode == 0 {
 					tmp.Href = base.DeanBaseURL + j.Attr("href")[2:]
 				} else {
 					tmp.Href = base.DeanBaseURL + j.Attr("href")[5:]
@@ -40,7 +45,6 @@ func RequestHRef(url string, page int) ([]base.ScraperHref, int) {
 			tmp.Description = i.ChildText("p")
 		})
 		tmp.Hash = tmp.SHA256()
-		tmp.Page = page
 		arr = append(arr, tmp)
 	})
 
@@ -50,7 +54,7 @@ func RequestHRef(url string, page int) ([]base.ScraperHref, int) {
 	})
 
 	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", r.URL)
+		log.Println("Visiting ", r.URL)
 	})
 
 	c.Visit(url)
@@ -74,37 +78,12 @@ func RequestContent(shref base.ScraperHref) base.ScraperContent {
 		r.Headers.Set("Referer", base.DeanBaseURL)
 	})
 
-	table_parser := func(h *colly.HTMLElement) string {
-		var rt string
-		h.ForEach("tr", func(_ int, i *colly.HTMLElement) {
-			rt += "[["
-			i.ForEach("td", func(_ int, j *colly.HTMLElement) {
-				if j.Text == "" {
-					rt += "/ "
-				} else {
-					rt += j.Text + " "
-				}
-			})
-			rt += "]]\n"
-		})
-		return rt
-	}
-
-	img_parser := func(raw string, cnt int) (string, string) {
-		tp := strings.Split(raw, ".")[1]
-		dst := fmt.Sprintf("%s_%d.%s", shref.Hash, cnt, tp)
-		dst = base.ParseWebFile(dst, "dean", shref.Page)
-		src := base.DeanBaseURL + raw
-		return src, dst
-	}
-	i_cnt := 1
-	e_cnt := 1
 	c.OnHTML("div[class='v_news_content']>p,table,p>img", func(h *colly.HTMLElement) {
+		i_cnt := 1
 		if n := h.Name; n == "p" {
 			if raw, flag := h.DOM.Attr("src"); flag {
-				src, dst := img_parser(raw, i_cnt)
+				dst := base.Download(raw, "dean", i_cnt, &shref.ScraperHead)
 				sc.Text += fmt.Sprintf("([%s])\n", dst)
-				base.Download(src, dst)
 				i_cnt++
 			} else {
 				if h.Text != "" {
@@ -112,43 +91,41 @@ func RequestContent(shref base.ScraperHref) base.ScraperContent {
 				}
 			}
 		} else if n == "table" {
-			sc.Text += table_parser(h)
+			sc.Text += base.ParseTable(h)
 		} else if n == "img" {
 			raw := h.Attr("src")
-			src, dst := img_parser(raw, i_cnt)
+			dst := base.Download(raw, "dean", i_cnt, &shref.ScraperHead)
 			sc.Text += fmt.Sprintf("([%s])\n", dst)
-			base.Download(src, dst)
 			i_cnt++
 		}
 	})
 
 	c.OnHTML("div[class='Newslist2']", func(h *colly.HTMLElement) {
+		e_cnt := 1
 		h.ForEach("a[href],table", func(_ int, i *colly.HTMLElement) {
 
 			if n := i.Name; n == "a" {
-				href := i.Attr("href")
-				tp := strings.Split(href, ".")[1]
-				dst := fmt.Sprintf("%s_%d.%s", shref.Hash, e_cnt, tp)
-				dst = base.ParseWebFile(dst, "dean", shref.Page)
-				src := base.DeanBaseURL + href
-				sc.Appendix += fmt.Sprintf("([%s])\n", dst)
+				raw := i.Attr("href")
+				dst := base.Download(raw, "dean", e_cnt, &shref.ScraperHead)
 				sc.Appendix += i.Text + "\n"
-				base.Download(src, dst)
+				sc.Appendix += fmt.Sprintf("([%s])\n", dst)
+
 				e_cnt += 1
 			} else if n == "table" {
-				sc.Appendix += table_parser(i)
+				sc.Appendix += base.ParseTable(i)
 			}
 		})
 	})
 
 	c.Visit(shref.Href)
+
 	return sc
 }
 
-func CheckUpdate() {
-
-}
-
 func Request() {
+	hrefs, _ := RequestHRef(base.DeanFirstPage, 0)
 
+	for _, h := range hrefs {
+		RequestContent(h)
+	}
 }
