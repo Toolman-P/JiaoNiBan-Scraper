@@ -1,7 +1,7 @@
 package databases
 
 import (
-	"JiaoNiBan-data/scraper/base"
+	"JiaoNiBan-data/scrapers/base"
 	"context"
 	"errors"
 	"log"

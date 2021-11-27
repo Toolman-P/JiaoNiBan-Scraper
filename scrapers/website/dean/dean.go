@@ -2,7 +2,7 @@ package dean
 
 import (
 	"JiaoNiBan-data/databases"
-	"JiaoNiBan-data/scraper/base"
+	"JiaoNiBan-data/scrapers/base"
 	"fmt"
 	"log"
 	"strconv"
