@@ -6,6 +6,6 @@ import (
 
 func main() {
 
-	dean.Request()
+	dean.CheckUpdate()
 	// databases.Close()
 }

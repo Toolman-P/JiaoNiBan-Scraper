@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -40,7 +41,7 @@ type ScraperContent struct {
 
 func Download(raw string, opt string, id int, shref *ScraperHead) string {
 	src := baseurlMap[opt] + raw
-	fmt.Println(src)
+	log.Println("downloading:", src)
 
 	r, _ := http.Get(src)
 	ex := strings.Split(r.Header.Get("Content-Type"), "/")[1]
@@ -50,13 +51,12 @@ func Download(raw string, opt string, id int, shref *ScraperHead) string {
 		shref.Hash,
 		id,
 		ex)
-	fmt.Println(dst)
+	log.Println(dst)
 	out, _ := os.Create(dst)
 	defer r.Body.Close()
 	defer out.Close()
 
-	n, _ := io.Copy(out, r.Body)
-	fmt.Println(n)
+	io.Copy(out, r.Body)
 	return dst
 }
 

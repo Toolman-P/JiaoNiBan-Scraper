@@ -3,19 +3,23 @@ package dean
 import (
 	"JiaoNiBan-data/databases"
 	"JiaoNiBan-data/scrapers/base"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gocolly/colly"
 )
 
-func parseIndex(i int) {
-
+func parseIndex(index int) string {
+	return fmt.Sprintf("%s/%d.htm", base.DeanPrefix, index)
 }
 
-func RequestHRef(url string, mode int) ([]base.ScraperHref, int) {
+func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 
 	var arr []base.ScraperHref
 	c := colly.NewCollector(
@@ -63,7 +67,7 @@ func RequestHRef(url string, mode int) ([]base.ScraperHref, int) {
 	return arr, sum
 }
 
-func RequestContent(shref base.ScraperHref) base.ScraperContent {
+func requestOne(shref *base.ScraperHref) base.ScraperContent {
 
 	sc := base.ScraperContent{}
 	sc.ScraperHead = shref.ScraperHead
@@ -125,15 +129,42 @@ func RequestContent(shref base.ScraperHref) base.ScraperContent {
 	return sc
 }
 
-func Request() {
-	hrefs, _ := RequestHRef(base.DeanFirstPage, 0)
-	databases.Init()
-	defer databases.Close()
-	for _, h := range hrefs {
+func requestContents(shrefs *[]base.ScraperHref) {
+	for _, h := range *shrefs {
 		if f, _ := databases.CheckHrefExists("dean", h.Hash); !f {
 			databases.AddHref("dean", h.Hash)
-			c := RequestContent(h)
+			c := requestOne(&h)
 			databases.AddPage(&c)
 		}
 	}
+}
+
+func CheckUpdate() bool {
+	databases.Init()
+	defer databases.Close()
+	r, _ := http.Get(base.DeanBaseURL)
+	t, _ := ioutil.ReadAll(r.Body)
+	h := sha256.Sum256(t)
+	if sha := hex.EncodeToString(h[:]); sha != databases.GetVersion("dean") {
+		databases.SetVersion("dean", sha)
+		hrefs, _ := requestHRef(base.DeanFirstPage, 0)
+		requestContents(&hrefs)
+		return true
+	}
+	return false
+}
+
+func Setup() {
+	databases.Init()
+	defer databases.Close()
+	hrefs, sum := requestHRef(base.DeanFirstPage, 0)
+	requestContents(&hrefs)
+	for i := sum - 1; i >= sum-11; i-- {
+		hrefs, _ = requestHRef(parseIndex(i), 1)
+		requestContents(&hrefs)
+	}
+}
+
+func FetchUpdate() {
+
 }
