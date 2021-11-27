@@ -1,6 +1,7 @@
 package dean
 
 import (
+	"JiaoNiBan-data/databases"
 	"JiaoNiBan-data/scraper/base"
 	"fmt"
 	"log"
@@ -78,8 +79,9 @@ func RequestContent(shref base.ScraperHref) base.ScraperContent {
 		r.Headers.Set("Referer", base.DeanBaseURL)
 	})
 
+	i_cnt := 1
 	c.OnHTML("div[class='v_news_content']>p,table,p>img", func(h *colly.HTMLElement) {
-		i_cnt := 1
+
 		if n := h.Name; n == "p" {
 			if raw, flag := h.DOM.Attr("src"); flag {
 				dst := base.Download(raw, "dean", i_cnt, &shref.ScraperHead)
@@ -100,8 +102,9 @@ func RequestContent(shref base.ScraperHref) base.ScraperContent {
 		}
 	})
 
+	e_cnt := 1
 	c.OnHTML("div[class='Newslist2']", func(h *colly.HTMLElement) {
-		e_cnt := 1
+
 		h.ForEach("a[href],table", func(_ int, i *colly.HTMLElement) {
 
 			if n := i.Name; n == "a" {
@@ -124,8 +127,13 @@ func RequestContent(shref base.ScraperHref) base.ScraperContent {
 
 func Request() {
 	hrefs, _ := RequestHRef(base.DeanFirstPage, 0)
-
+	databases.Init()
+	defer databases.Close()
 	for _, h := range hrefs {
-		RequestContent(h)
+		if f, _ := databases.CheckHrefExists("dean", h.Hash); !f {
+			databases.AddHref("dean", h.Hash)
+			c := RequestContent(h)
+			databases.AddPage(&c)
+		}
 	}
 }
