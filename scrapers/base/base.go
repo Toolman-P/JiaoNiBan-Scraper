@@ -13,13 +13,6 @@ import (
 	"github.com/gocolly/colly"
 )
 
-type Scraper struct {
-	user_agent string
-	referer    string
-	base_url   string
-	target     string
-}
-
 type ScraperHead struct {
 	Title       string
 	Author      string
