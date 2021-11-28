@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
@@ -23,7 +24,6 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 
 	var arr []base.ScraperHref
 	c := colly.NewCollector(
-		// colly.Async(true),
 		colly.UserAgent(base.UserAgent),
 		colly.MaxDepth(5),
 	)
@@ -49,7 +49,7 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 			})
 			tmp.Description = i.ChildText("p")
 		})
-		tmp.Hash = tmp.SHA256()
+		tmp.Hash = base.SHA256(tmp.ScraperHead)
 		arr = append(arr, tmp)
 	})
 
@@ -67,7 +67,7 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 	return arr, sum
 }
 
-func requestOne(shref *base.ScraperHref) base.ScraperContent {
+func requestOne(shref base.ScraperHref) base.ScraperContent {
 
 	sc := base.ScraperContent{}
 	sc.ScraperHead = shref.ScraperHead
@@ -123,48 +123,59 @@ func requestOne(shref *base.ScraperHref) base.ScraperContent {
 			}
 		})
 	})
-
 	c.Visit(shref.Href)
-
 	return sc
 }
 
-func requestContents(shrefs *[]base.ScraperHref) {
-	for _, h := range *shrefs {
+func requestContents(shrefs []base.ScraperHref) {
+	var w sync.WaitGroup
+	for _, h := range shrefs {
 		if f, _ := databases.CheckHrefExists("dean", h.Hash); !f {
-			databases.AddHref("dean", h.Hash)
-			c := requestOne(&h)
-			databases.AddPage(&c)
+			w.Add(1)
+			go func(i base.ScraperHref) {
+				databases.AddHref("dean", i.Hash)
+				c := requestOne(i)
+				databases.AddPage(c)
+				w.Done()
+			}(h)
 		}
 	}
+	w.Wait()
 }
 
-func CheckUpdate() bool {
-	databases.Init()
-	defer databases.Close()
+func validateVersion() bool {
 	r, _ := http.Get(base.DeanBaseURL)
 	t, _ := ioutil.ReadAll(r.Body)
 	h := sha256.Sum256(t)
 	if sha := hex.EncodeToString(h[:]); sha != databases.GetVersion("dean") {
 		databases.SetVersion("dean", sha)
-		hrefs, _ := requestHRef(base.DeanFirstPage, 0)
-		requestContents(&hrefs)
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
-func Setup() {
+func CheckUpdate() {
+
 	databases.Init()
 	defer databases.Close()
-	hrefs, sum := requestHRef(base.DeanFirstPage, 0)
-	requestContents(&hrefs)
-	for i := sum - 1; i >= sum-11; i-- {
-		hrefs, _ = requestHRef(parseIndex(i), 1)
-		requestContents(&hrefs)
+
+	if !validateVersion() {
+		log.Println("Fetching updates...")
+		hrefs, _ := requestHRef(base.DeanFirstPage, 0)
+		requestContents(hrefs)
+		return
 	}
+	log.Println("Current version is the latest version.")
 }
 
-func FetchUpdate() {
-
+func Setup(pages int) {
+	databases.Init()
+	defer databases.Close()
+	validateVersion()
+	fhref, sum := requestHRef(base.DeanFirstPage, 0)
+	requestContents(fhref)
+	for i := sum - 1; i >= sum-pages; i-- {
+		hrefs, _ := requestHRef(parseIndex(i), 1)
+		requestContents(hrefs)
+	}
 }

@@ -39,24 +39,52 @@ type ScraperContent struct {
 	Appendix string
 }
 
+func isExist(path string) bool {
+	_, err := os.Stat(path)
+	if err != nil {
+		return os.IsExist(err)
+	}
+	return true
+}
+
 func Download(raw string, opt string, id int, shref *ScraperHead) string {
 	src := baseurlMap[opt] + raw
-	log.Println("downloading:", src)
 
 	r, _ := http.Get(src)
-	ex := strings.Split(r.Header.Get("Content-Type"), "/")[1]
-	dst := fmt.Sprintf("%s/%s/%s_%d.%s",
-		storagePath,
-		opt,
+	log.Println("Downloading:", src)
+	var ex string
+	{
+		cd := r.Header.Get("Content-Disposition")
+		if len(cd) == 0 {
+			ct := r.Header.Get("Content-Type")
+			if len(ct) == 0 {
+				return "Failed Fetching"
+			}
+			ex = strings.Split(ct, "/")[1]
+
+		} else {
+			s1 := strings.Split(cd, ";")
+			ex = strings.Split(s1[2], ".")[1]
+		}
+	}
+
+	dirs := fmt.Sprintf("%s/%s", storagePath, opt)
+	dst := fmt.Sprintf("%s/%s_%d.%s",
+		dirs,
 		shref.Hash,
 		id,
 		ex)
-	log.Println(dst)
-	out, _ := os.Create(dst)
-	defer r.Body.Close()
-	defer out.Close()
+	log.Println("Saved to:", dst)
 
-	io.Copy(out, r.Body)
+	defer r.Body.Close()
+	if !isExist(dirs) {
+		os.MkdirAll(dirs, os.ModePerm)
+	}
+	if !isExist(dst) {
+		out, _ := os.Create(dst)
+		defer out.Close()
+		io.Copy(out, r.Body)
+	}
 	return dst
 }
 
@@ -76,7 +104,7 @@ func ParseTable(h *colly.HTMLElement) string {
 	return rt
 }
 
-func (sh *ScraperHead) SHA256() string {
+func SHA256(sh ScraperHead) string {
 	data := strings.Join([]string{sh.Title, sh.Description, sh.Date}, ":")
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])

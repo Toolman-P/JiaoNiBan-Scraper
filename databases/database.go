@@ -93,11 +93,11 @@ func SetVersion(cat string, ver string) {
 	data.rdb.Set(context.TODO(), v, ver, 0)
 }
 
-func AddPage(sc *base.ScraperContent) (bool, error) {
+func AddPage(sc base.ScraperContent) (bool, error) {
 	if !CheckConnection() {
 		return false, errors.New("connection failed")
 	}
-	c := data.mdb.Database("contents").Collection(sc.Author)
+	c := data.mdb.Database("offices").Collection(sc.Author)
 	_, err := c.InsertOne(context.TODO(), bson.D{{"title", sc.Title},
 		{"author", sc.Author},
 		{"date", sc.Date},
