@@ -24,7 +24,6 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 
 	var arr []base.ScraperHref
 	c := colly.NewCollector(
-		colly.UserAgent(base.UserAgent),
 		colly.MaxDepth(5),
 	)
 
@@ -33,9 +32,10 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 		tmp := base.ScraperHref{}
 		tmp.Author = "dean"
 		h.ForEach("div[class='sj']", func(_ int, i *colly.HTMLElement) {
-			day := i.ChildText("h2")
-			year_month := i.ChildText("p")
-			tmp.Date = strings.Join([]string{year_month, day}, ".")
+			tmp.Day, _ = strconv.Atoi(i.ChildText("h2"))
+			year_month := strings.Split(i.ChildText("p"), ".")
+			tmp.Year, _ = strconv.Atoi(year_month[0])
+			tmp.Month, _ = strconv.Atoi(year_month[1])
 		})
 
 		h.ForEach("div[class='wz']", func(_ int, i *colly.HTMLElement) {
@@ -47,9 +47,9 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 				}
 				tmp.Title = j.ChildText("h2")
 			})
-			tmp.Description = i.ChildText("p")
+			tmp.Desc = i.ChildText("p")
 		})
-		tmp.Hash = base.SHA256(tmp.ScraperHead)
+		tmp.Hash = base.SH_SHA256(tmp.ScraperHead)
 		arr = append(arr, tmp)
 	})
 
@@ -60,6 +60,13 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 
 	c.OnRequest(func(r *colly.Request) {
 		log.Println("Visiting ", r.URL)
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+		r.Headers.Set("Accept-Encoding", "gzip, deflate")
+		r.Headers.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
+		r.Headers.Set("Host", base.DeanBaseURL)
+		r.Headers.Set("Proxy-Connection", "keep-alive")
+		r.Headers.Set("Upgrade-Insecure-Requests", "1")
+		r.Headers.Set("User-Agent", base.UserAgent)
 	})
 
 	c.Visit(url)
@@ -67,7 +74,7 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 	return arr, sum
 }
 
-func requestOne(shref base.ScraperHref) base.ScraperContent {
+func requestOne(shref base.ScraperHref, page int) base.ScraperContent {
 
 	sc := base.ScraperContent{}
 	sc.ScraperHead = shref.ScraperHead
@@ -77,12 +84,15 @@ func requestOne(shref base.ScraperHref) base.ScraperContent {
 	c := colly.NewCollector(
 		colly.MaxDepth(5),
 	)
-
 	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+		r.Headers.Set("Accept-Encoding", "gzip, deflate")
+		r.Headers.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
+		r.Headers.Set("Host", base.DeanBaseURL)
+		r.Headers.Set("Proxy-Connection", "keep-alive")
+		r.Headers.Set("Upgrade-Insecure-Requests", "1")
 		r.Headers.Set("User-Agent", base.UserAgent)
-		r.Headers.Set("Referer", base.DeanBaseURL)
 	})
-
 	i_cnt := 1
 	c.OnHTML("div[class='v_news_content']>p,table,p>img", func(h *colly.HTMLElement) {
 
@@ -92,7 +102,7 @@ func requestOne(shref base.ScraperHref) base.ScraperContent {
 				sc.Text += fmt.Sprintf("([%s])\n", dst)
 				i_cnt++
 			} else {
-				if h.Text != "" {
+				if h.Text != "" && h.Text != "\n" {
 					sc.Text += h.Text + "\n"
 				}
 			}
@@ -124,23 +134,25 @@ func requestOne(shref base.ScraperHref) base.ScraperContent {
 		})
 	})
 	c.Visit(shref.Href)
+	sc.Page = page
 	return sc
 }
+func requestContents(shrefs []base.ScraperHref, page int, ref string) {
 
-func requestContents(shrefs []base.ScraperHref) {
 	var w sync.WaitGroup
 	for _, h := range shrefs {
 		if f, _ := databases.CheckHrefExists("dean", h.Hash); !f {
 			w.Add(1)
 			go func(i base.ScraperHref) {
 				databases.AddHref("dean", i.Hash)
-				c := requestOne(i)
+				c := requestOne(i, page)
 				databases.AddPage(c)
 				w.Done()
 			}(h)
 		}
 	}
 	w.Wait()
+
 }
 
 func validateVersion() bool {
@@ -161,8 +173,9 @@ func CheckUpdate() {
 
 	if !validateVersion() {
 		log.Println("Fetching updates...")
-		hrefs, _ := requestHRef(base.DeanFirstPage, 0)
-		requestContents(hrefs)
+		hrefs, sum := requestHRef(base.DeanFirstPage, 0)
+		requestContents(hrefs, sum, base.DeanFirstPage)
+		databases.SetLatestPage("dean", sum)
 		return
 	}
 	log.Println("Current version is the latest version.")
@@ -173,9 +186,11 @@ func Setup(pages int) {
 	defer databases.Close()
 	validateVersion()
 	fhref, sum := requestHRef(base.DeanFirstPage, 0)
-	requestContents(fhref)
+	databases.SetLatestPage("dean", sum)
+	requestContents(fhref, sum, base.DeanFirstPage)
 	for i := sum - 1; i >= sum-pages; i-- {
-		hrefs, _ := requestHRef(parseIndex(i), 1)
-		requestContents(hrefs)
+		url := parseIndex(i)
+		hrefs, _ := requestHRef(url, 1)
+		requestContents(hrefs, i, url)
 	}
 }

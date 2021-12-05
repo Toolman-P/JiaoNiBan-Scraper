@@ -1,0 +1,9 @@
+version: '3'
+services:
+  scraper:
+    build: .
+    volumes: 
+      - ./downloads:/app/downloads
+    network_mode: "host"
+
+  

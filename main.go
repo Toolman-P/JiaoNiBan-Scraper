@@ -18,7 +18,6 @@ func main() {
 	if *upd {
 		log.Println("Checking Update for Dean Office")
 		dean.CheckUpdate()
-
 		return
 	}
 }

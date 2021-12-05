@@ -8,17 +8,20 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gocolly/colly"
 )
 
 type ScraperHead struct {
-	Title       string
-	Author      string
-	Date        string
-	Description string
-	Hash        string
+	Title  string
+	Author string
+	Year   int
+	Month  int
+	Day    int
+	Desc   string
+	Hash   string
 }
 
 type ScraperHref struct {
@@ -29,6 +32,7 @@ type ScraperHref struct {
 type ScraperContent struct {
 	ScraperHead
 	Text     string
+	Page     int
 	Appendix string
 }
 
@@ -43,7 +47,11 @@ func isExist(path string) bool {
 func Download(raw string, opt string, id int, shref *ScraperHead) string {
 	src := baseurlMap[opt] + raw
 
-	r, _ := http.Get(src)
+	r, err := http.Get(src)
+	if err != nil {
+		return "Error Fetching"
+	}
+
 	log.Println("Downloading:", src)
 	var ex string
 	{
@@ -56,8 +64,8 @@ func Download(raw string, opt string, id int, shref *ScraperHead) string {
 			ex = strings.Split(ct, "/")[1]
 
 		} else {
-			s1 := strings.Split(cd, ";")
-			ex = strings.Split(s1[2], ".")[1]
+			s := strings.Split(strings.Split(cd, ";")[2], ".")
+			ex = s[len(s)-1]
 		}
 	}
 
@@ -97,8 +105,9 @@ func ParseTable(h *colly.HTMLElement) string {
 	return rt
 }
 
-func SHA256(sh ScraperHead) string {
-	data := strings.Join([]string{sh.Title, sh.Description, sh.Date}, ":")
+func SH_SHA256(sh ScraperHead) string {
+	data := strings.Join([]string{sh.Title, sh.Desc, strconv.Itoa(sh.Year),
+		strconv.Itoa(sh.Month), strconv.Itoa(sh.Day)}, ":")
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])
 }

@@ -63,24 +63,24 @@ func CheckConnection() bool {
 	return err == nil
 }
 
-func CheckHrefExists(cat string, hash string) (bool, error) {
+func CheckHrefExists(opt string, hash string) (bool, error) {
 	if !CheckConnection() {
 		return false, errors.New("connection failed")
 	}
 
-	return data.rdb.SIsMember(context.TODO(), cat, hash).Result()
+	return data.rdb.SIsMember(context.TODO(), opt, hash).Result()
 }
 
-func AddHref(cat string, hash string) (bool, error) {
+func AddHref(opt string, hash string) (bool, error) {
 	if !CheckConnection() {
 		return false, errors.New("connection failed")
 	}
-	f, err := data.rdb.SAdd(context.TODO(), cat, hash).Result()
+	f, err := data.rdb.SAdd(context.TODO(), opt, hash).Result()
 	return f == 1, err
 }
 
-func GetVersion(cat string) string {
-	v := fmt.Sprintf("%s.sha256", cat)
+func GetVersion(opt string) string {
+	v := fmt.Sprintf("%s.sha256", opt)
 	if i, _ := data.rdb.Exists(context.TODO(), v).Result(); i == 1 {
 		r, _ := data.rdb.Get(context.TODO(), v).Result()
 		return r
@@ -88,9 +88,23 @@ func GetVersion(cat string) string {
 	return "X"
 }
 
-func SetVersion(cat string, ver string) {
-	v := fmt.Sprintf("%s.sha256", cat)
+func GetLatestPage(opt string) int {
+	v := fmt.Sprintf("%s.latest", opt)
+	if i, _ := data.rdb.Exists(context.TODO(), v).Result(); i == 1 {
+		r, _ := data.rdb.Get(context.TODO(), v).Int()
+		return r
+	}
+	return -1
+}
+
+func SetVersion(opt string, ver string) {
+	v := fmt.Sprintf("%s.sha256", opt)
 	data.rdb.Set(context.TODO(), v, ver, 0)
+}
+
+func SetLatestPage(opt string, sum int) {
+	v := fmt.Sprintf("%s.latest", opt)
+	data.rdb.Set(context.TODO(), v, sum, 0)
 }
 
 func AddPage(sc base.ScraperContent) (bool, error) {
@@ -100,10 +114,14 @@ func AddPage(sc base.ScraperContent) (bool, error) {
 	c := data.mdb.Database("offices").Collection(sc.Author)
 	_, err := c.InsertOne(context.TODO(), bson.D{{"title", sc.Title},
 		{"author", sc.Author},
-		{"date", sc.Date},
-		{"description", sc.Description},
-		{"sha256", sc.Hash},
-		{"text", sc.Text}})
+		{"Year", sc.Year},
+		{"Month", sc.Month},
+		{"Day", sc.Day},
+		{"Page", sc.Page},
+		{"description", sc.Desc},
+		{"text", sc.Text},
+		{"appendix", sc.Appendix},
+		{"sha256", sc.Hash}})
 
 	if err != nil {
 		return false, err
