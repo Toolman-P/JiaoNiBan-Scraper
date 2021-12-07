@@ -31,7 +31,7 @@ type ScraperHref struct {
 
 type ScraperContent struct {
 	ScraperHead
-	Text     string
+	Body     string
 	Page     int
 	Appendix string
 }

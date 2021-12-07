@@ -17,7 +17,7 @@ import (
 )
 
 func parseIndex(index int) string {
-	return fmt.Sprintf("%s/%d.htm", base.DeanPrefix, index)
+	return fmt.Sprintf("%s/%d.htm", deanPrefix, index)
 }
 
 func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
@@ -41,9 +41,9 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 		h.ForEach("div[class='wz']", func(_ int, i *colly.HTMLElement) {
 			i.ForEach("a[href]", func(_ int, j *colly.HTMLElement) {
 				if mode == 0 {
-					tmp.Href = base.DeanBaseURL + j.Attr("href")[2:]
+					tmp.Href = deanBaseURL + j.Attr("href")[2:]
 				} else {
-					tmp.Href = base.DeanBaseURL + j.Attr("href")[5:]
+					tmp.Href = deanBaseURL + j.Attr("href")[5:]
 				}
 				tmp.Title = j.ChildText("h2")
 			})
@@ -63,7 +63,7 @@ func requestHRef(url string, mode int) ([]base.ScraperHref, int) {
 		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
 		r.Headers.Set("Accept-Encoding", "gzip, deflate")
 		r.Headers.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
-		r.Headers.Set("Host", base.DeanBaseURL)
+		r.Headers.Set("Host", deanBaseURL)
 		r.Headers.Set("Proxy-Connection", "keep-alive")
 		r.Headers.Set("Upgrade-Insecure-Requests", "1")
 		r.Headers.Set("User-Agent", base.UserAgent)
@@ -78,7 +78,7 @@ func requestOne(shref base.ScraperHref, page int) base.ScraperContent {
 
 	sc := base.ScraperContent{}
 	sc.ScraperHead = shref.ScraperHead
-	sc.Text = ""
+	sc.Body = ""
 	sc.Appendix = ""
 
 	c := colly.NewCollector(
@@ -88,7 +88,7 @@ func requestOne(shref base.ScraperHref, page int) base.ScraperContent {
 		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
 		r.Headers.Set("Accept-Encoding", "gzip, deflate")
 		r.Headers.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
-		r.Headers.Set("Host", base.DeanBaseURL)
+		r.Headers.Set("Host", deanBaseURL)
 		r.Headers.Set("Proxy-Connection", "keep-alive")
 		r.Headers.Set("Upgrade-Insecure-Requests", "1")
 		r.Headers.Set("User-Agent", base.UserAgent)
@@ -98,20 +98,20 @@ func requestOne(shref base.ScraperHref, page int) base.ScraperContent {
 
 		if n := h.Name; n == "p" {
 			if raw, flag := h.DOM.Attr("src"); flag {
-				dst := base.Download(raw, "dean", i_cnt, &shref.ScraperHead)
-				sc.Text += fmt.Sprintf("([%s])\n", dst)
+				dst := base.Download(raw, opt, i_cnt, &shref.ScraperHead)
+				sc.Body += fmt.Sprintf("([%s])\n", dst)
 				i_cnt++
 			} else {
 				if h.Text != "" && h.Text != "\n" {
-					sc.Text += h.Text + "\n"
+					sc.Body += h.Text + "\n"
 				}
 			}
 		} else if n == "table" {
-			sc.Text += base.ParseTable(h)
+			sc.Body += base.ParseTable(h)
 		} else if n == "img" {
 			raw := h.Attr("src")
-			dst := base.Download(raw, "dean", i_cnt, &shref.ScraperHead)
-			sc.Text += fmt.Sprintf("([%s])\n", dst)
+			dst := base.Download(raw, opt, i_cnt, &shref.ScraperHead)
+			sc.Body += fmt.Sprintf("([%s])\n", dst)
 			i_cnt++
 		}
 	})
@@ -123,7 +123,7 @@ func requestOne(shref base.ScraperHref, page int) base.ScraperContent {
 
 			if n := i.Name; n == "a" {
 				raw := i.Attr("href")
-				dst := base.Download(raw, "dean", e_cnt, &shref.ScraperHead)
+				dst := base.Download(raw, opt, e_cnt, &shref.ScraperHead)
 				sc.Appendix += i.Text + "\n"
 				sc.Appendix += fmt.Sprintf("([%s])\n", dst)
 
@@ -137,16 +137,18 @@ func requestOne(shref base.ScraperHref, page int) base.ScraperContent {
 	sc.Page = page
 	return sc
 }
+
 func requestContents(shrefs []base.ScraperHref, page int, ref string) {
 
 	var w sync.WaitGroup
 	for _, h := range shrefs {
-		if f, _ := databases.CheckHrefExists("dean", h.Hash); !f {
+		if f, _ := databases.CheckHrefExists(opt, h.Hash); !f {
 			w.Add(1)
 			go func(i base.ScraperHref) {
-				databases.AddHref("dean", i.Hash)
+				databases.AddHref(opt, i.Hash)
 				c := requestOne(i, page)
-				databases.AddPage(c)
+				databases.AddDesc(opt, &c)
+				databases.AddContent(opt, &c)
 				w.Done()
 			}(h)
 		}
@@ -156,11 +158,11 @@ func requestContents(shrefs []base.ScraperHref, page int, ref string) {
 }
 
 func validateVersion() bool {
-	r, _ := http.Get(base.DeanBaseURL)
+	r, _ := http.Get(deanBaseURL)
 	t, _ := ioutil.ReadAll(r.Body)
 	h := sha256.Sum256(t)
-	if sha := hex.EncodeToString(h[:]); sha != databases.GetVersion("dean") {
-		databases.SetVersion("dean", sha)
+	if sha := hex.EncodeToString(h[:]); sha != databases.GetVersion(opt) {
+		databases.SetVersion(opt, sha)
 		return false
 	}
 	return true
@@ -173,21 +175,27 @@ func CheckUpdate() {
 
 	if !validateVersion() {
 		log.Println("Fetching updates...")
-		hrefs, sum := requestHRef(base.DeanFirstPage, 0)
-		requestContents(hrefs, sum, base.DeanFirstPage)
-		databases.SetLatestPage("dean", sum)
-		return
+		hrefs, sum := requestHRef(deanFirstPage, 0)
+		requestContents(hrefs, sum, deanFirstPage)
+		s_prev := databases.GetLatestPage(opt)
+		l_prev := databases.GetPageSum(opt)
+		if sum > s_prev {
+			databases.SetLatestPage(opt, sum)
+			databases.SetPageSum(opt, l_prev+sum-s_prev)
+		}
+	} else {
+		log.Println("Current version is the latest version.")
 	}
-	log.Println("Current version is the latest version.")
 }
 
 func Setup(pages int) {
 	databases.Init()
 	defer databases.Close()
 	validateVersion()
-	fhref, sum := requestHRef(base.DeanFirstPage, 0)
-	databases.SetLatestPage("dean", sum)
-	requestContents(fhref, sum, base.DeanFirstPage)
+	fhref, sum := requestHRef(deanFirstPage, 0)
+	databases.SetLatestPage(opt, sum)
+	databases.SetPageSum(opt, pages)
+	requestContents(fhref, sum, deanFirstPage)
 	for i := sum - 1; i >= sum-pages; i-- {
 		url := parseIndex(i)
 		hrefs, _ := requestHRef(url, 1)
