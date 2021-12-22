@@ -3,7 +3,8 @@ services:
   scraper:
     build: .
     volumes: 
-      - ./downloads:/app/downloads
-    network_mode: "host"
+      - /home/toolmanp/static:/app/downloads
+    container_name: dean_scraper
+      
 
   

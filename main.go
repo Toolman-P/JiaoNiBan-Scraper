@@ -20,4 +20,7 @@ func main() {
 		dean.CheckUpdate()
 		return
 	}
+	// var sh base.ScraperHref
+	// sh.Href = "https://www.sjtu.edu.cn/tg/20211220/165433.html"
+	// fmt.Println(dean.RequestOne(sh, 0))
 }
