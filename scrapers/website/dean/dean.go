@@ -17,7 +17,7 @@ import (
 	"github.com/gocolly/colly"
 )
 
-func parseIndex(index int) string {
+func wrapIndex(index int) string {
 	return fmt.Sprintf("%s/%d.htm", deanPrefix, index)
 }
 
@@ -154,11 +154,11 @@ func RequestOne(shref base.ScraperHref, page int) base.ScraperContent {
 	return sc
 }
 
-func requestContents(shrefs []base.ScraperHref, page int, ref string) {
+func requestContents(shrefs *[]base.ScraperHref, page int, ref string) {
 
 	var w sync.WaitGroup
-	for _, h := range shrefs {
-		if f, _ := databases.CheckHrefExists(opt, h.Hash); !f {
+	for _, sh := range *shrefs {
+		if f, _ := databases.CheckHrefExists(sh.Author, sh.Hash); !f {
 			w.Add(1)
 			go func(i base.ScraperHref) {
 				databases.AddHref(opt, i.Hash)
@@ -166,7 +166,7 @@ func requestContents(shrefs []base.ScraperHref, page int, ref string) {
 				databases.AddDesc(opt, &c)
 				databases.AddContent(opt, &c)
 				w.Done()
-			}(h)
+			}(sh)
 		}
 	}
 	w.Wait()
@@ -190,9 +190,9 @@ func CheckUpdate() {
 
 	if !validateVersion() {
 		log.Println("Fetching updates...")
-		hrefs, sum := RequestHRef(deanFirstPage, 0)
-		rabbit.Push(&hrefs)
-		requestContents(hrefs, sum, deanFirstPage)
+		descs, sum := RequestHRef(deanFirstPage, 0)
+		rabbit.Push(&descs)
+		requestContents(&descs, sum, deanFirstPage)
 		s_prev := databases.GetLatestPage(opt)
 		l_prev := databases.GetPageSum(opt)
 		if sum > s_prev {
@@ -211,10 +211,10 @@ func Setup(pages int) {
 	fhref, sum := RequestHRef(deanFirstPage, 0)
 	databases.SetLatestPage(opt, sum)
 	databases.SetPageSum(opt, pages)
-	requestContents(fhref, sum, deanFirstPage)
+	requestContents(&fhref, sum, deanFirstPage)
 	for i := sum - 1; i >= sum-pages; i-- {
-		url := parseIndex(i)
+		url := wrapIndex(i)
 		hrefs, _ := RequestHRef(url, 1)
-		requestContents(hrefs, i, url)
+		requestContents(&hrefs, i, url)
 	}
 }
