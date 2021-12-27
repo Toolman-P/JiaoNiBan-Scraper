@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/go-redis/redis/v8"
 	"go.mongodb.org/mongo-driver/bson"
@@ -31,21 +30,22 @@ func Init() error {
 	return nil
 }
 
-func Close() error {
-	err := rdb.Close()
-	if err != nil {
-		log.Fatal("Something happened when closing redis.")
-		defer mdb.Disconnect(context.TODO())
-		return err
-	}
-	err = mdb.Disconnect(context.TODO())
+func Close() {
 
-	if err != nil {
-		log.Fatal("Something wrong happened when closing mongo.")
-		return err
+	var err error
+	if rdb != nil {
+		err = rdb.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	return nil
+	if mdb != nil {
+		err = mdb.Disconnect(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func CheckConnection() bool {

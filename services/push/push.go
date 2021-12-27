@@ -21,8 +21,12 @@ func Push(shrefs *[]base.ScraperHref) {
 	}
 
 	defer func() {
-		ch.Close()
-		conn.Close()
+		if ch != nil {
+			ch.Close()
+		}
+		if conn != nil {
+			conn.Close()
+		}
 	}()
 
 	q, err := ch.QueueDeclare(queueid, false, false, false, false, nil)
