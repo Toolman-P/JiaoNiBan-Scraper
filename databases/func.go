@@ -34,15 +34,13 @@ func Close() {
 
 	var err error
 	if rdb != nil {
-		err = rdb.Close()
-		if err != nil {
+		if err = rdb.Close(); err != nil {
 			panic(err)
 		}
 	}
 
 	if mdb != nil {
-		err = mdb.Disconnect(context.TODO())
-		if err != nil {
+		if err = mdb.Disconnect(context.TODO()); err != nil {
 			panic(err)
 		}
 	}
